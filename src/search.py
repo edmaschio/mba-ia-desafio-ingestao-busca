@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_postgres import PGVector
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
 load_dotenv()
@@ -52,8 +51,6 @@ def search_prompt(question=None):
         use_jsonb=True
     )
 
-    retriever = store.as_retriever(search_kwargs={"k": 10})
-
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash-lite",
         temperature=0
@@ -61,15 +58,9 @@ def search_prompt(question=None):
 
     prompt = PromptTemplate.from_template(PROMPT_TEMPLATE)
 
-    def format_docs(docs):
-        return "\n\n".join(doc.page_content for doc in docs)
+    results = store.similarity_search_with_score(question, k=10)
+    context = "\n\n".join(doc.page_content for doc, score in results)
 
-    rag_chain = (
-        {"contexto": retriever | format_docs, "pergunta": RunnablePassthrough()}
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
-
-    response = rag_chain.invoke(question)
+    rag_chain = prompt | llm | StrOutputParser()
+    response = rag_chain.invoke({"contexto": context, "pergunta": question})
     return response
